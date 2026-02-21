@@ -52,7 +52,9 @@ let isRunning = true;
 const activeJobs = new Map<string, { abortController: AbortController; startTime: number }>();
 let processedCount = 0;
 let failedCount = 0;
+let pollCount = 0;
 let lastSuccessfulPoll = Date.now();
+const workerStartTime = Date.now();
 
 // =====================================================
 // LOGGING
@@ -65,8 +67,25 @@ function log(
 ) {
   const ts = new Date().toISOString();
   const icon = { info: 'ℹ', warn: '⚠', error: '✗', debug: '·' }[level];
-  const extra = data ? ' ' + JSON.stringify(data) : '';
-  console.log(`[${ts}] ${icon} ${message}${extra}`);
+  const uptimeSec = Math.floor((Date.now() - workerStartTime) / 1000);
+  const base = { ts, uptime_sec: uptimeSec, ...(data || {}) };
+  console.log(`[${ts}] ${icon} ${message} ${JSON.stringify(base)}`);
+}
+
+/** Emit a periodic heartbeat — logged every HEARTBEAT_INTERVAL_MS. */
+const HEARTBEAT_INTERVAL_MS = 60_000;
+let lastHeartbeat = Date.now();
+
+function maybeHeartbeat() {
+  if (Date.now() - lastHeartbeat < HEARTBEAT_INTERVAL_MS) return;
+  lastHeartbeat = Date.now();
+  log('info', 'Worker heartbeat', {
+    activeJobs: activeJobs.size,
+    processedCount,
+    failedCount,
+    pollCount,
+    idleSinceSec: Math.floor((Date.now() - lastSuccessfulPoll) / 1000),
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -106,8 +125,7 @@ async function completeJob(
     .from('ai_jobs')
     .update({
       status: 'completed',
-      output: output,           // original column
-      output_data: output,      // new column
+      output_data: output,
       token_usage: tokenUsage ?? null,
       execution_time_ms: executionTimeMs ?? null,
       completed_at: new Date().toISOString(),
@@ -131,17 +149,16 @@ async function completeJob(
 
 async function failJob(jobId: string, errorMessage: string) {
   try {
-    // Use authoritative 'attempts' column (not retry_count) for retry gate
     const { data: job } = await supabase
       .from('ai_jobs')
-      .select('attempts, max_attempts, task_id')
+      .select('retry_count, max_retries, task_id')
       .eq('id', jobId)
       .single();
 
     if (!job) return;
 
-    const currentAttempts = (job.attempts as number) || 0;
-    const maxAttempts = (job.max_attempts as number) || 3;
+    const currentAttempts = (job.retry_count as number) || 0;
+    const maxAttempts = (job.max_retries as number) || 3;
 
     if (currentAttempts < maxAttempts) {
       // Exponential backoff: 2^attempts seconds + jitter, capped at 10 min
@@ -155,13 +172,14 @@ async function failJob(jobId: string, errorMessage: string) {
           status: 'queued',
           last_error: errorMessage,
           error_message: errorMessage,
-          retry_count: currentAttempts,
+          retry_count: currentAttempts + 1,
           locked_at: null,
           locked_by: null,
           started_at: null,
           next_run_at: nextRunAt,
         })
-        .eq('id', jobId);
+        .eq('id', jobId)
+        .eq('status', 'running');
 
       log('warn', 'Job requeued for retry', {
         jobId,
@@ -242,7 +260,28 @@ async function checkAndContinueWorkflow(
 
     if (!execution || execution.status !== 'running') return;
 
-    const nextStepIndex = (stepExec.step_index as number) + 1;
+    const currentStepIndex = stepExec.step_index as number;
+    const nextStepIndex = currentStepIndex + 1;
+
+    // Compensation helper: if advancing the workflow fails after current_step was
+    // already written, revert current_step and mark the workflow/task as failed so
+    // the operator can inspect and requeue rather than leave the workflow stuck.
+    const failWorkflow = async (reason: string) => {
+      await supabase
+        .from('workflow_executions')
+        .update({
+          current_step: currentStepIndex,
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', execution.id as string);
+      await supabase.from('tasks').update({ status: 'failed' }).eq('id', taskId);
+      log('error', 'Workflow advancement failed — execution marked failed', {
+        executionId: execution.id,
+        taskId,
+        reason,
+      });
+    };
 
     // Advance current_step pointer
     await supabase
@@ -413,7 +452,7 @@ async function checkAndContinueWorkflow(
         .single();
 
       if (jobErr) {
-        log('error', 'Failed to queue next workflow step', { error: jobErr.message });
+        await failWorkflow(`Failed to queue next job: ${jobErr.message}`);
         return;
       }
 
@@ -519,18 +558,20 @@ async function executeJob(job: Record<string, unknown>) {
         ? JSON.parse(job.input_data as string)
         : (job.input_data as Record<string, unknown>) || {};
 
-    // Race against timeout
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
+    // Race against timeout — store the handle so we can clear it when the
+    // agent finishes normally (prevents a dangling timer in the event loop).
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
         () => reject(new Error(`Timeout after ${config.jobTimeoutMs}ms`)),
         config.jobTimeoutMs
-      )
-    );
+      );
+    });
 
     const agentOutput = await Promise.race([
       agent.execute({ taskId, inputData, context: {}, previousOutputs: [] }),
       timeoutPromise,
-    ]);
+    ]).finally(() => clearTimeout(timeoutHandle));
 
     if (!agentOutput.success) {
       throw new Error(agentOutput.error || 'Agent returned failure');
@@ -635,7 +676,9 @@ async function workerLoop() {
         );
       }
 
+      pollCount++;
       await checkTimedOutJobs();
+      maybeHeartbeat();
       await sleep(config.pollIntervalMs);
     } catch (err) {
       log('error', 'Worker loop error', { error: String(err) });

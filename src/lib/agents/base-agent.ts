@@ -261,12 +261,12 @@ export abstract class BaseAgent {
    * Build messages for the LLM
    * Override in subclasses for custom message structure
    */
-  protected async buildMessages(input: AgentInput): Promise<CoreMessage[]> {
+  protected async buildMessages(input: AgentInput): Promise<Message[]> {
     const systemPrompt = this.config.systemPrompt || this.getDefaultSystemPrompt();
-    
+
     const userPrompt = await this.buildUserPrompt(input);
 
-    const messages: CoreMessage[] = [
+    const messages: Message[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
@@ -306,7 +306,7 @@ Always respond with valid JSON when structured output is expected.`;
   /**
    * Call the LLM with the given messages
    */
-  protected async callLLM(messages: CoreMessage[]): Promise<{
+  protected async callLLM(messages: Message[]): Promise<{
     output: string;
     summary?: string;
     tokenUsage?: TokenUsage;
@@ -353,7 +353,7 @@ Always respond with valid JSON when structured output is expected.`;
   /**
    * Call Ollama directly via HTTP
    */
-  private async callOllama(messages: CoreMessage[]): Promise<{
+  private async callOllama(messages: Message[]): Promise<{
     output: string;
     summary?: string;
     tokenUsage?: TokenUsage;
@@ -361,10 +361,16 @@ Always respond with valid JSON when structured output is expected.`;
     const baseURL = this.config.baseURL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
 
     try {
+      // Map to plain {role, content} objects — Ollama only accepts string content
+      const ollamaMessages = messages.map((m) => ({
+        role: m.role as string,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      }));
+
       const result = await callOllamaChat({
         baseURL,
         model: this.config.model,
-        messages,
+        messages: ollamaMessages,
         timeout: this.config.timeoutMs,
       });
 

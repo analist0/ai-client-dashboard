@@ -6,8 +6,9 @@
  * as well as its native /api endpoints for model management.
  */
 
-// Minimal message shape used by Ollama chat (compatible with ai SDK v6)
-type Message = { role: string; content: string };
+// Minimal message shape accepted by the Ollama HTTP endpoint.
+// Named differently from the ai SDK's `Message` type to avoid confusion.
+type OllamaChatMessage = { role: string; content: string };
 
 // =====================================================
 // TYPES
@@ -460,7 +461,7 @@ export async function callOllamaChat({
 }: {
   baseURL: string;
   model: string;
-  messages: Message[];
+  messages: OllamaChatMessage[];
   timeout?: number;
 }): Promise<{
   output: string;

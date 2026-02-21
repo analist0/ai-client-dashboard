@@ -16,13 +16,27 @@ import {
   deleteOllamaModel,
   getOllamaModelInfo,
 } from '@/lib/llm/ollama';
+import { createAdminClient } from '@/lib/supabase/client';
 
 const OLLAMA_BASE_URL =
   process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 
+async function requireAdmin(req: NextRequest): Promise<{ id: string } | null> {
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const supabase = createAdminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data } = await supabase.from('users').select('role').eq('id', user.id).single();
+  return data?.role === 'admin' ? { id: user.id } : null;
+}
+
 // ── GET /api/ollama ──────────────────────────────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const caller = await requireAdmin(req);
+  if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const status = await detectOllamaStatus(OLLAMA_BASE_URL);
   return NextResponse.json(status);
 }
@@ -30,6 +44,8 @@ export async function GET() {
 // ── POST /api/ollama ─────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const caller = await requireAdmin(req);
+  if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   let body: { action?: string; model?: string };
   try {
     body = await req.json();

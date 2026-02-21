@@ -9,17 +9,26 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/client';
 
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+async function requireAdmin(
+  req: NextRequest
+): Promise<{ id: string; supabase: ReturnType<typeof createAdminClient> } | null> {
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const supabase = createAdminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data } = await supabase.from('users').select('role').eq('id', user.id).single();
+  return data?.role === 'admin' ? { id: user.id, supabase } : null;
 }
 
 export async function POST(req: NextRequest) {
+  const caller = await requireAdmin(req);
+  if (!caller) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { taskId, workflowId } = body as { taskId?: string; workflowId?: string };
@@ -31,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = adminClient();
+    const supabase = caller.supabase;
 
     // Load task
     const { data: task, error: taskErr } = await supabase
@@ -77,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     if (execErr || !execution) {
       return NextResponse.json(
-        { error: `Failed to create execution: ${execErr?.message}` },
+        { error: 'Failed to create workflow execution' },
         { status: 500 }
       );
     }
@@ -159,7 +168,7 @@ export async function POST(req: NextRequest) {
 
       if (jobErr || !job) {
         return NextResponse.json(
-          { error: `Failed to queue first job: ${jobErr?.message}` },
+          { error: 'Failed to queue first job' },
           { status: 500 }
         );
       }
@@ -188,6 +197,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error('[workflows/start] Unhandled error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
