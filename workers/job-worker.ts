@@ -173,7 +173,7 @@ async function failJob(jobId: string, errorMessage: string) {
           status: 'queued',
           last_error: errorMessage,
           error_message: errorMessage,
-          retry_count: currentAttempts,
+          retry_count: currentAttempts + 1,
           locked_at: null,
           locked_by: null,
           started_at: null,
@@ -260,7 +260,28 @@ async function checkAndContinueWorkflow(
 
     if (!execution || execution.status !== 'running') return;
 
-    const nextStepIndex = (stepExec.step_index as number) + 1;
+    const currentStepIndex = stepExec.step_index as number;
+    const nextStepIndex = currentStepIndex + 1;
+
+    // Compensation helper: if advancing the workflow fails after current_step was
+    // already written, revert current_step and mark the workflow/task as failed so
+    // the operator can inspect and requeue rather than leave the workflow stuck.
+    const failWorkflow = async (reason: string) => {
+      await supabase
+        .from('workflow_executions')
+        .update({
+          current_step: currentStepIndex,
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', execution.id as string);
+      await supabase.from('tasks').update({ status: 'failed' }).eq('id', taskId);
+      log('error', 'Workflow advancement failed — execution marked failed', {
+        executionId: execution.id,
+        taskId,
+        reason,
+      });
+    };
 
     // Advance current_step pointer
     await supabase
@@ -431,7 +452,7 @@ async function checkAndContinueWorkflow(
         .single();
 
       if (jobErr) {
-        log('error', 'Failed to queue next workflow step', { error: jobErr.message });
+        await failWorkflow(`Failed to queue next job: ${jobErr.message}`);
         return;
       }
 

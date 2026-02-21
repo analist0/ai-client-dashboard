@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent, StatusBadge, ProgressBar } fr
 import { useAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useTasks } from '@/hooks/use-tasks';
-import { formatDate, formatRelativeTime, getTaskTypeIcon, getAgentIcon } from '@/lib/utils/helpers';
+import { cn, formatDate, formatRelativeTime, getTaskTypeIcon, getAgentIcon } from '@/lib/utils/helpers';
 import type { Task } from '@/types';
 import Link from 'next/link';
 
@@ -270,6 +270,3 @@ function StatCard({ title, value, total, icon, color }: StatCardProps) {
   );
 }
 
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return classes.filter(Boolean).join(' ');
-}

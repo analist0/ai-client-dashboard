@@ -10,7 +10,7 @@ import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button, Timeline } from '@/components/ui';
 import { useTasks } from '@/hooks/use-tasks';
 import { createBrowserClient } from '@/lib/supabase/client';
-import { formatDate, formatRelativeTime, getTaskTypeIcon } from '@/lib/utils/helpers';
+import { cn, formatDate, formatRelativeTime } from '@/lib/utils/helpers';
 import type { Project, Task } from '@/types';
 import Link from 'next/link';
 
@@ -223,6 +223,3 @@ function StatBox({ label, value, color }: StatBoxProps) {
   );
 }
 
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return classes.filter(Boolean).join(' ');
-}

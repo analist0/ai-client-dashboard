@@ -11,7 +11,7 @@ import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button } from '@/components/ui';
 import { useProjects } from '@/hooks/use-projects';
 import { useAuth } from '@/hooks/use-auth';
-import { formatDate } from '@/lib/utils/helpers';
+import { cn, formatDate } from '@/lib/utils/helpers';
 import type { Project, ProjectStatus } from '@/types';
 
 export default function AdminProjectsPage() {
@@ -302,6 +302,3 @@ function ProjectModal({ project, onClose, onSave }: ProjectModalProps) {
   );
 }
 
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return classes.filter(Boolean).join(' ');
-}

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
 import { createBrowserClient } from '@/lib/supabase/client';
-import { formatDate, formatFileSize } from '@/lib/utils/helpers';
+import { cn, formatDate, formatFileSize } from '@/lib/utils/helpers';
 
 interface DeliverableRow {
   id: string;
@@ -184,6 +184,3 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-function cn(...classes: (string | boolean | undefined | null)[]) {
-  return classes.filter(Boolean).join(' ');
-}
