@@ -5,48 +5,60 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
+import { createBrowserClient } from '@/lib/supabase/client';
 import { formatDate, formatFileSize } from '@/lib/utils/helpers';
 
-// Mock data - in production, fetch from API
-const mockDeliverables = [
-  {
-    id: '1',
-    name: 'Blog Post - AI Trends 2024',
-    task_name: 'Write AI Trends Blog Post',
-    file_type: 'document',
-    file_url: '#',
-    file_size: 256000,
-    version: 1,
-    is_final: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'SEO Audit Report',
-    task_name: 'SEO Analysis',
-    file_type: 'pdf',
-    file_url: '#',
-    file_size: 1024000,
-    version: 2,
-    is_final: true,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: '3',
-    name: 'Landing Page Copy',
-    task_name: 'Create Landing Page Content',
-    file_type: 'document',
-    file_url: '#',
-    file_size: 128000,
-    version: 3,
-    is_final: false,
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-];
+interface DeliverableRow {
+  id: string;
+  name: string;
+  task_name: string;
+  file_type: string | null;
+  file_url: string | null;
+  file_size: number | null;
+  version: number;
+  is_final: boolean;
+  created_at: string;
+}
 
 export default function DeliverablesPage() {
+  const [deliverables, setDeliverables] = useState<DeliverableRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+
+    supabase
+      .from('deliverables')
+      .select('id, name, file_type, file_url, file_size, version, is_final, created_at, tasks(name)')
+      .order('created_at', { ascending: false })
+      .then(({ data, error: fetchError }) => {
+        if (fetchError) {
+          setError('Failed to load deliverables');
+        } else {
+          setDeliverables(
+            (data || []).map((d) => ({
+              id: d.id,
+              name: d.name,
+              task_name: (d.tasks as { name: string } | null)?.name ?? 'Unknown task',
+              file_type: d.file_type,
+              file_url: d.file_url,
+              file_size: d.file_size,
+              version: d.version,
+              is_final: d.is_final,
+              created_at: d.created_at,
+            }))
+          );
+        }
+        setLoading(false);
+      });
+  }, []);
+
+  const totalSize = deliverables.reduce((acc, d) => acc + (d.file_size || 0), 0);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -58,27 +70,41 @@ export default function DeliverablesPage() {
           </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Files" value={mockDeliverables.length} color="blue" />
-          <StatCard label="Final Versions" value={mockDeliverables.filter(d => d.is_final).length} color="green" />
-          <StatCard label="Drafts" value={mockDeliverables.filter(d => !d.is_final).length} color="yellow" />
-          <StatCard label="Total Size" value={formatFileSize(mockDeliverables.reduce((acc, d) => acc + (d.file_size || 0), 0))} color="purple" />
-        </div>
-
-        {/* Deliverables List */}
-        <Card>
-          <CardHeader>
-            <CardTitle as="h2">All Deliverables</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mockDeliverables.map((deliverable) => (
-                <DeliverableCard key={deliverable.id} deliverable={deliverable} />
-              ))}
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          </div>
+        ) : error ? (
+          <div className="rounded-lg bg-red-50 p-4 text-red-700">{error}</div>
+        ) : (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard label="Total Files" value={deliverables.length} color="blue" />
+              <StatCard label="Final Versions" value={deliverables.filter((d) => d.is_final).length} color="green" />
+              <StatCard label="Drafts" value={deliverables.filter((d) => !d.is_final).length} color="yellow" />
+              <StatCard label="Total Size" value={formatFileSize(totalSize)} color="purple" />
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Deliverables List */}
+            <Card>
+              <CardHeader>
+                <CardTitle as="h2">All Deliverables</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {deliverables.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No deliverables yet</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {deliverables.map((deliverable) => (
+                      <DeliverableCard key={deliverable.id} deliverable={deliverable} />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );
@@ -88,22 +114,8 @@ export default function DeliverablesPage() {
 // DELIVERABLE CARD COMPONENT
 // =====================================================
 
-interface DeliverableCardProps {
-  deliverable: {
-    id: string;
-    name: string;
-    task_name: string;
-    file_type: string;
-    file_url: string;
-    file_size: number | null;
-    version: number;
-    is_final: boolean;
-    created_at: string;
-  };
-}
-
-function DeliverableCard({ deliverable }: DeliverableCardProps) {
-  const getFileIcon = (type: string) => {
+function DeliverableCard({ deliverable }: { deliverable: DeliverableRow }) {
+  const getFileIcon = (type: string | null) => {
     const icons: Record<string, string> = {
       document: '📄',
       pdf: '📕',
@@ -112,7 +124,7 @@ function DeliverableCard({ deliverable }: DeliverableCardProps) {
       audio: '🎵',
       archive: '📦',
     };
-    return icons[type] || '📎';
+    return icons[type ?? ''] || '📎';
   };
 
   return (
@@ -125,9 +137,7 @@ function DeliverableCard({ deliverable }: DeliverableCardProps) {
             <p className="text-sm text-gray-500 truncate">{deliverable.task_name}</p>
           </div>
         </div>
-        {deliverable.is_final && (
-          <Badge variant="success">Final</Badge>
-        )}
+        {deliverable.is_final && <Badge variant="success">Final</Badge>}
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
@@ -137,12 +147,18 @@ function DeliverableCard({ deliverable }: DeliverableCardProps) {
       </div>
 
       <div className="mt-4 flex gap-2">
-        <Button variant="primary" size="sm" className="flex-1">
-          Download
-        </Button>
-        <Button variant="outline" size="sm">
-          Preview
-        </Button>
+        {deliverable.file_url ? (
+          <a href={deliverable.file_url} download className="flex-1">
+            <Button variant="primary" size="sm" className="w-full">
+              Download
+            </Button>
+          </a>
+        ) : (
+          <Button variant="primary" size="sm" className="flex-1" disabled>
+            No file
+          </Button>
+        )}
+        <Button variant="outline" size="sm">Preview</Button>
       </div>
     </div>
   );

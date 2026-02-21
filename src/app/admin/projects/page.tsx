@@ -5,17 +5,37 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button } from '@/components/ui';
 import { useProjects } from '@/hooks/use-projects';
+import { useAuth } from '@/hooks/use-auth';
 import { formatDate } from '@/lib/utils/helpers';
 import type { Project, ProjectStatus } from '@/types';
 
 export default function AdminProjectsPage() {
+  const router = useRouter();
+  const { user, loading: authLoading, isAdmin } = useAuth();
   const { projects, loading, createProject, updateProject, deleteProject } = useProjects();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  // Client-side guard — prevents flash of admin content for non-admin users.
+  // Middleware handles the hard redirect before SSR; this covers the hydration gap.
+  useEffect(() => {
+    if (!authLoading && (!user || !isAdmin)) {
+      router.replace('/dashboard');
+    }
+  }, [user, authLoading, isAdmin, router]);
+
+  if (authLoading || !isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <DashboardLayout>

@@ -90,15 +90,28 @@ export async function PATCH(
       );
     }
 
-    // Update approval record
-    await supabase
+    // Update approval record first; all subsequent writes are wrapped so we
+    // can compensate (revert) the approval if the workflow advancement fails.
+    const { error: approvalUpdateErr } = await supabase
       .from('approvals')
       .update({
         status,
         response_notes: notes ?? null,
         responded_at: new Date().toISOString(),
+        responded_by: caller.id,
       })
       .eq('id', approvalId);
+
+    if (approvalUpdateErr) {
+      return NextResponse.json({ error: 'Failed to record response' }, { status: 500 });
+    }
+
+    // Helper: revert the approval to pending if downstream writes fail
+    const revertApproval = () =>
+      supabase
+        .from('approvals')
+        .update({ status: 'pending', responded_at: null, responded_by: null, response_notes: null })
+        .eq('id', approvalId);
 
     const taskId = approval.task_id as string;
     const meta = approval.metadata as {
@@ -108,7 +121,14 @@ export async function PATCH(
 
     // ── Rejected: fail the workflow ────────────────────────────
     if (status === 'rejected') {
-      await supabase.from('tasks').update({ status: 'failed' }).eq('id', taskId);
+      const { error: taskErr } = await supabase
+        .from('tasks')
+        .update({ status: 'failed' })
+        .eq('id', taskId);
+      if (taskErr) {
+        await revertApproval();
+        return NextResponse.json({ error: 'Failed to update task status' }, { status: 500 });
+      }
 
       if (meta?.execution_id) {
         await supabase
@@ -134,7 +154,14 @@ export async function PATCH(
 
     // ── Revision requested: reset task to running ──────────────
     if (status === 'revision_requested') {
-      await supabase.from('tasks').update({ status: 'running' }).eq('id', taskId);
+      const { error: taskErr } = await supabase
+        .from('tasks')
+        .update({ status: 'running' })
+        .eq('id', taskId);
+      if (taskErr) {
+        await revertApproval();
+        return NextResponse.json({ error: 'Failed to update task status' }, { status: 500 });
+      }
       return NextResponse.json({
         taskId,
         status: 'revision_requested',
@@ -152,49 +179,58 @@ export async function PATCH(
     const executionId = meta.execution_id;
     const approvalStepIndex = meta.step_index;
 
-    // Mark the approval step_execution as completed
-    await supabase
-      .from('workflow_step_executions')
-      .update({
-        status: 'completed',
-        output_data: { approved: true, approved_at: new Date().toISOString() },
-        completed_at: new Date().toISOString(),
-      })
-      .eq('execution_id', executionId)
-      .eq('step_index', approvalStepIndex);
+    // All following writes advance the workflow. If any fails we revert the
+    // approval so the client can retry — this is a best-effort compensation
+    // strategy (true atomicity would require a DB-level transaction/RPC).
+    try {
+      // Mark the approval step_execution as completed
+      await supabase
+        .from('workflow_step_executions')
+        .update({
+          status: 'completed',
+          output_data: { approved: true, approved_at: new Date().toISOString() },
+          completed_at: new Date().toISOString(),
+        })
+        .eq('execution_id', executionId)
+        .eq('step_index', approvalStepIndex)
+        .throwOnError();
 
-    // Load workflow execution
-    const { data: execution } = await supabase
-      .from('workflow_executions')
-      .select('id, workflow_id, total_steps, current_step')
-      .eq('id', executionId)
-      .single();
+      // Load workflow execution
+      const { data: execution } = await supabase
+        .from('workflow_executions')
+        .select('id, workflow_id, total_steps, current_step')
+        .eq('id', executionId)
+        .single();
 
-    if (!execution) {
-      return NextResponse.json({ error: 'Workflow execution not found' }, { status: 404 });
-    }
+      if (!execution) {
+        await revertApproval();
+        return NextResponse.json({ error: 'Workflow execution not found' }, { status: 404 });
+      }
 
-    const nextStepIndex = approvalStepIndex + 1;
+      const nextStepIndex = approvalStepIndex + 1;
 
-    // Advance current_step
-    await supabase
-      .from('workflow_executions')
-      .update({ current_step: nextStepIndex })
-      .eq('id', executionId);
-
-    // All steps done
-    if (nextStepIndex >= (execution.total_steps as number)) {
+      // Advance current_step
       await supabase
         .from('workflow_executions')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', executionId);
-      await supabase
-        .from('tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', taskId);
+        .update({ current_step: nextStepIndex })
+        .eq('id', executionId)
+        .throwOnError();
 
-      return NextResponse.json({ taskId, status: 'completed', message: 'Workflow completed' });
-    }
+      // All steps done
+      if (nextStepIndex >= (execution.total_steps as number)) {
+        await supabase
+          .from('workflow_executions')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', executionId)
+          .throwOnError();
+        await supabase
+          .from('tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', taskId)
+          .throwOnError();
+
+        return NextResponse.json({ taskId, status: 'completed', message: 'Workflow completed' });
+      }
 
     // Load next step from workflow definition
     const { data: workflow } = await supabase
@@ -299,55 +335,60 @@ export async function PATCH(
         .single();
 
       if (jobErr || !newJob) {
-        return NextResponse.json(
-          { error: 'Failed to queue next job' },
-          { status: 500 }
-        );
+          await revertApproval();
+          return NextResponse.json({ error: 'Failed to queue next job' }, { status: 500 });
+        }
+
+        if (stepExec) {
+          await supabase
+            .from('workflow_step_executions')
+            .update({ ai_job_id: newJob.id })
+            .eq('id', stepExec.id as string);
+        }
+
+        await supabase.from('tasks').update({ status: 'running' }).eq('id', taskId).throwOnError();
+
+        return NextResponse.json({
+          taskId,
+          status: 'running',
+          nextJobId: newJob.id,
+          message: `Approved. Queued next step: ${nextStep.name}`,
+        });
       }
 
-      if (stepExec) {
+      // Another approval gate
+      if (nextStep.type === 'wait_for_approval') {
+        await supabase.from('approvals').insert({
+          task_id: taskId,
+          status: 'pending',
+          metadata: { step_name: nextStep.name, step_index: nextStepIndex, execution_id: executionId },
+        }).throwOnError();
         await supabase
           .from('workflow_step_executions')
-          .update({ ai_job_id: newJob.id })
-          .eq('id', stepExec.id as string);
+          .insert({
+            execution_id: executionId,
+            step_index: nextStepIndex,
+            step_name: nextStep.name,
+            status: 'pending',
+            started_at: new Date().toISOString(),
+          }).throwOnError();
+        await supabase.from('tasks').update({ status: 'waiting_approval' }).eq('id', taskId).throwOnError();
+
+        return NextResponse.json({
+          taskId,
+          status: 'waiting_approval',
+          message: `Approved. Next step requires another approval: ${nextStep.name}`,
+        });
       }
 
-      await supabase.from('tasks').update({ status: 'running' }).eq('id', taskId);
+      return NextResponse.json({ taskId, status: 'approved', message: 'Approved' });
 
-      return NextResponse.json({
-        taskId,
-        status: 'running',
-        nextJobId: newJob.id,
-        message: `Approved. Queued next step: ${nextStep.name}`,
-      });
+    } catch (workflowErr) {
+      // Compensate: revert the approval so the client can retry
+      await revertApproval();
+      console.error('[approvals] Workflow advancement failed, approval reverted:', workflowErr);
+      return NextResponse.json({ error: 'Failed to advance workflow. Please try again.' }, { status: 500 });
     }
-
-    // Another approval gate
-    if (nextStep.type === 'wait_for_approval') {
-      await supabase.from('approvals').insert({
-        task_id: taskId,
-        status: 'pending',
-        metadata: { step_name: nextStep.name, step_index: nextStepIndex, execution_id: executionId },
-      });
-      await supabase
-        .from('workflow_step_executions')
-        .insert({
-          execution_id: executionId,
-          step_index: nextStepIndex,
-          step_name: nextStep.name,
-          status: 'pending',
-          started_at: new Date().toISOString(),
-        });
-      await supabase.from('tasks').update({ status: 'waiting_approval' }).eq('id', taskId);
-
-      return NextResponse.json({
-        taskId,
-        status: 'waiting_approval',
-        message: `Approved. Next step requires another approval: ${nextStep.name}`,
-      });
-    }
-
-    return NextResponse.json({ taskId, status: 'approved', message: 'Approved' });
   } catch (err) {
     console.error('[approvals] Unhandled error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

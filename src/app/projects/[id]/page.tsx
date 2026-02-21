@@ -9,6 +9,7 @@ import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button, Timeline } from '@/components/ui';
 import { useTasks } from '@/hooks/use-tasks';
+import { createBrowserClient } from '@/lib/supabase/client';
 import { formatDate, formatRelativeTime, getTaskTypeIcon } from '@/lib/utils/helpers';
 import type { Project, Task } from '@/types';
 import Link from 'next/link';
@@ -21,21 +22,15 @@ export default function ProjectDetailPage() {
 
   // Fetch project details
   useEffect(() => {
-    // In a real app, fetch from API
-    // For now, we'll use a placeholder
-    setProject({
-      id: projectId,
-      client_id: 'client-1',
-      name: 'Sample Project',
-      description: 'This is a sample project description.',
-      status: 'active',
-      start_date: new Date().toISOString(),
-      deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      currency: 'USD',
-      metadata: {},
-    } as Project);
+    const supabase = createBrowserClient();
+    supabase
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .single()
+      .then(({ data }) => {
+        if (data) setProject(data as unknown as Project);
+      });
   }, [projectId]);
 
   // Calculate task stats
