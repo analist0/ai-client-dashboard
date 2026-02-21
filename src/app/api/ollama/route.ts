@@ -22,7 +22,7 @@ const OLLAMA_BASE_URL =
   process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 
 async function requireAdmin(req: NextRequest): Promise<{ id: string } | null> {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const supabase = createAdminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);

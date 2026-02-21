@@ -317,7 +317,7 @@ CREATE INDEX idx_ai_jobs_task_id ON ai_jobs(task_id);
 CREATE INDEX idx_ai_jobs_status ON ai_jobs(status);
 CREATE INDEX idx_ai_jobs_agent_name ON ai_jobs(agent_name);
 -- Composite indexes for worker polling efficiency
-CREATE INDEX idx_ai_jobs_status_created ON ai_jobs(status, created_at);
+CREATE INDEX idx_ai_jobs_status_created_all ON ai_jobs(status, created_at);
 CREATE INDEX idx_ai_jobs_queued_next_run ON ai_jobs(status, next_run_at) WHERE status = 'queued';
 CREATE INDEX idx_ai_jobs_running_locked ON ai_jobs(status, locked_at) WHERE status = 'running';
 CREATE INDEX idx_workflow_executions_task_id ON workflow_executions(task_id);
@@ -910,7 +910,8 @@ AS $$
     FROM ai_jobs
     WHERE status = 'queued'
       AND retry_count < max_retries
-    ORDER BY created_at ASC
+      AND next_run_at <= NOW()
+    ORDER BY next_run_at ASC, created_at ASC
     FOR UPDATE SKIP LOCKED
     LIMIT 1
   )
@@ -990,8 +991,8 @@ $$;
 -- INDEXES FOR WORKER PERFORMANCE
 -- =====================================================
 
--- Index for job claiming (status + created_at)
-CREATE INDEX IF NOT EXISTS idx_ai_jobs_status_created ON ai_jobs(status, created_at ASC) WHERE status = 'queued';
+-- Index for job claiming (status + next_run_at, partial on queued) — matches claim_next_ai_job() filter
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_status_created ON ai_jobs(next_run_at ASC, created_at ASC) WHERE status = 'queued';
 
 -- Index for stuck job reaping
 CREATE INDEX IF NOT EXISTS idx_ai_jobs_running_started ON ai_jobs(started_at) WHERE status = 'running';

@@ -19,7 +19,7 @@ This file provides guidance for AI assistants working in this codebase.
 
 ## Repository Structure
 
-```
+```text
 src/
   app/              # Next.js App Router routes and API endpoints
   lib/
@@ -156,7 +156,7 @@ All agents extend `BaseAgent` (`src/lib/agents/base-agent.ts`). The base class h
 | `ResearchAgent` | `agents/research-agent.ts` | Information gathering |
 | `WriterAgent` | `agents/writer-agent.ts` | Content creation |
 | `EditorAgent` | `agents/editor-agent.ts` | Content refinement |
-| `SeoAgent` | `agents/seo-agent.ts` | SEO optimization |
+| `SeoAgent` | `agents/seo-agent.ts` | Search Engine Optimization analysis |
 | `PlannerAgent` | `agents/planner-agent.ts` | Project planning |
 
 ### Creating a new agent
@@ -202,7 +202,7 @@ type: 'custom'            // Custom step logic
 
 ### Workflow execution flow
 
-```
+```text
 POST /api/workflows/start
   → WorkflowExecutor.execute()  (src/lib/workflows/workflow-engine.ts)
   → For each step: run agent or wait for approval
@@ -231,7 +231,7 @@ In production, manage it with PM2 (`ecosystem.config.js`) or as a Docker service
 
 Key tables and their relationships:
 
-```
+```text
 users → clients → projects → tasks
                                ↓
                            ai_jobs (many per task)
@@ -279,7 +279,7 @@ Components displaying live AI job logs should use these hooks rather than pollin
 
 ## Known Issues
 
-- **TypeScript type errors** in `src/lib/agents/base-agent.ts` and `src/lib/llm/ollama.ts`: the Vercel AI SDK updated `CoreMessage` → `Message` in a breaking change. The code compiles and runs correctly but IDEs show type errors. Fix: update imports to use `type Message` from `ai` (already done in base-agent) and audit ollama.ts.
+- **TypeScript type errors** in `src/lib/agents/base-agent.ts`: the Vercel AI SDK updated `CoreMessage` → `Message` in a breaking change. The import has been updated to use `type Message` from `ai`. `src/lib/llm/ollama.ts` is unaffected — it uses its own `OllamaChatMessage` type and does not import from the AI SDK.
 
 ---
 

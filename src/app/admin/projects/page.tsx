@@ -122,7 +122,11 @@ export default function AdminProjectsPage() {
                             <Button
                               size="sm"
                               variant="danger"
-                              onClick={() => deleteProject(project.id)}
+                              onClick={() => {
+                                if (window.confirm(`Delete "${project.name}"? This cannot be undone.`)) {
+                                  deleteProject(project.id);
+                                }
+                              }}
                             >
                               Delete
                             </Button>

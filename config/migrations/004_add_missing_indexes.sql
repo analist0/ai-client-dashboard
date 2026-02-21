@@ -11,7 +11,8 @@ CREATE INDEX IF NOT EXISTS idx_approvals_status
 CREATE INDEX IF NOT EXISTS idx_workflow_step_executions_ai_job_id
   ON workflow_step_executions(ai_job_id);
 
--- Partial index: only 'running' executions need fast lookup
+-- Partial index: only 'running' executions need fast lookup; status is
+-- redundant in the column list because the WHERE clause already constrains it.
 CREATE INDEX IF NOT EXISTS idx_workflow_executions_status_running
-  ON workflow_executions(status, task_id)
+  ON workflow_executions(task_id)
   WHERE status = 'running';

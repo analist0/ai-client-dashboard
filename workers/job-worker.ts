@@ -84,7 +84,6 @@ function maybeHeartbeat() {
     processedCount,
     failedCount,
     pollCount,
-    uptimeSec: Math.floor((Date.now() - workerStartTime) / 1000),
     idleSinceSec: Math.floor((Date.now() - lastSuccessfulPoll) / 1000),
   });
 }
@@ -179,7 +178,8 @@ async function failJob(jobId: string, errorMessage: string) {
           started_at: null,
           next_run_at: nextRunAt,
         })
-        .eq('id', jobId);
+        .eq('id', jobId)
+        .eq('status', 'running');
 
       log('warn', 'Job requeued for retry', {
         jobId,
@@ -558,18 +558,20 @@ async function executeJob(job: Record<string, unknown>) {
         ? JSON.parse(job.input_data as string)
         : (job.input_data as Record<string, unknown>) || {};
 
-    // Race against timeout
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
+    // Race against timeout — store the handle so we can clear it when the
+    // agent finishes normally (prevents a dangling timer in the event loop).
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
         () => reject(new Error(`Timeout after ${config.jobTimeoutMs}ms`)),
         config.jobTimeoutMs
-      )
-    );
+      );
+    });
 
     const agentOutput = await Promise.race([
       agent.execute({ taskId, inputData, context: {}, previousOutputs: [] }),
       timeoutPromise,
-    ]);
+    ]).finally(() => clearTimeout(timeoutHandle));
 
     if (!agentOutput.success) {
       throw new Error(agentOutput.error || 'Agent returned failure');

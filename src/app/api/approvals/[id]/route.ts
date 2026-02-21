@@ -15,7 +15,7 @@ import { createAdminClient } from '@/lib/supabase/client';
 async function getAuthenticatedUser(
   req: NextRequest
 ): Promise<{ id: string; role: string } | null> {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const supabase = createAdminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
@@ -140,28 +140,36 @@ export async function PATCH(
       }
 
       if (meta?.execution_id) {
-        await supabase
-          .from('workflow_executions')
-          .update({ status: 'failed', completed_at: new Date().toISOString() })
-          .eq('id', meta.execution_id);
-
-        if (meta.step_index !== undefined) {
+        try {
           await supabase
-            .from('workflow_step_executions')
-            .update({
-              status: 'failed',
-              error_message: 'Rejected by client',
-              completed_at: new Date().toISOString(),
-            })
-            .eq('execution_id', meta.execution_id)
-            .eq('step_index', meta.step_index);
+            .from('workflow_executions')
+            .update({ status: 'failed', completed_at: new Date().toISOString() })
+            .eq('id', meta.execution_id)
+            .throwOnError();
+
+          if (meta.step_index !== undefined) {
+            await supabase
+              .from('workflow_step_executions')
+              .update({
+                status: 'failed',
+                error_message: 'Rejected by client',
+                completed_at: new Date().toISOString(),
+              })
+              .eq('execution_id', meta.execution_id)
+              .eq('step_index', meta.step_index)
+              .throwOnError();
+          }
+        } catch {
+          await revertApproval();
+          await supabase.from('tasks').update({ status: 'waiting_approval' }).eq('id', taskId);
+          return NextResponse.json({ error: 'Failed to update workflow status' }, { status: 500 });
         }
       }
 
       return NextResponse.json({ taskId, status: 'failed', message: 'Workflow rejected' });
     }
 
-    // ── Revision requested: reset task to running ──────────────
+    // ── Revision requested: re-queue previous AI step ─────────
     if (status === 'revision_requested') {
       const { error: taskErr } = await supabase
         .from('tasks')
@@ -171,10 +179,90 @@ export async function PATCH(
         await revertApproval();
         return NextResponse.json({ error: 'Failed to update task status' }, { status: 500 });
       }
+
+      // Re-queue the AI step that preceded this approval gate so the worker
+      // picks it up again with the revision notes included in the input.
+      if (meta?.execution_id && meta.step_index !== undefined && meta.step_index > 0) {
+        const prevStepIndex = meta.step_index - 1;
+        const { data: execution } = await supabase
+          .from('workflow_executions')
+          .select('workflow_id')
+          .eq('id', meta.execution_id)
+          .single();
+
+        if (execution) {
+          const { data: workflow } = await supabase
+            .from('workflows')
+            .select('definition')
+            .eq('id', execution.workflow_id as string)
+            .single();
+
+          const steps = (workflow?.definition as { steps: Record<string, unknown>[] })?.steps || [];
+          const prevStep = steps[prevStepIndex] as {
+            name: string;
+            type: string;
+            agent?: string;
+            retry_count?: number;
+            config?: { model?: string; provider?: string };
+          } | undefined;
+
+          if (prevStep?.type === 'ai' && prevStep.agent) {
+            const { data: task } = await supabase
+              .from('tasks')
+              .select('input_data')
+              .eq('id', taskId)
+              .single();
+
+            const inputData: Record<string, unknown> = {
+              ...(task?.input_data as Record<string, unknown> || {}),
+              ...(notes ? { revision_notes: notes } : {}),
+            };
+
+            const { data: newJob } = await supabase
+              .from('ai_jobs')
+              .insert({
+                task_id: taskId,
+                agent_name: prevStep.agent,
+                model: prevStep.config?.model || process.env.DEFAULT_LLM_MODEL || 'gpt-4o-mini',
+                provider: prevStep.config?.provider || process.env.DEFAULT_LLM_PROVIDER || 'openai',
+                status: 'queued',
+                prompt: JSON.stringify({ workflow_step: prevStep.name, task_id: taskId, revision: true }),
+                input_data: inputData,
+                max_retries: prevStep.retry_count ?? 3,
+              })
+              .select('id')
+              .single();
+
+            if (newJob) {
+              // Reset the previous step execution to pending and link to the new job
+              await supabase
+                .from('workflow_step_executions')
+                .update({
+                  status: 'pending',
+                  output_data: null,
+                  error_message: null,
+                  completed_at: null,
+                  started_at: new Date().toISOString(),
+                  ai_job_id: newJob.id,
+                  input_data: inputData,
+                })
+                .eq('execution_id', meta.execution_id)
+                .eq('step_index', prevStepIndex);
+
+              // Rewind workflow current_step to the step being re-done
+              await supabase
+                .from('workflow_executions')
+                .update({ current_step: prevStepIndex, status: 'running' })
+                .eq('id', meta.execution_id);
+            }
+          }
+        }
+      }
+
       return NextResponse.json({
         taskId,
         status: 'revision_requested',
-        message: 'Revision requested — task reset to running',
+        message: 'Revision requested — previous step re-queued for rework',
       });
     }
 
@@ -272,15 +360,18 @@ export async function PATCH(
           status: 'completed',
           output_data: { published: true },
           completed_at: new Date().toISOString(),
-        });
+        })
+        .throwOnError();
       await supabase
         .from('workflow_executions')
         .update({ status: 'completed', current_step: nextStepIndex + 1, completed_at: new Date().toISOString() })
-        .eq('id', executionId);
+        .eq('id', executionId)
+        .throwOnError();
       await supabase
         .from('tasks')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .throwOnError();
 
       return NextResponse.json({ taskId, status: 'completed', message: 'Published and completed' });
     }

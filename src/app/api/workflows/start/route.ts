@@ -11,14 +11,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/client';
 
-async function requireAdmin(req: NextRequest): Promise<{ id: string } | null> {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+async function requireAdmin(
+  req: NextRequest
+): Promise<{ id: string; supabase: ReturnType<typeof createAdminClient> } | null> {
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const supabase = createAdminClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
   const { data } = await supabase.from('users').select('role').eq('id', user.id).single();
-  return data?.role === 'admin' ? { id: user.id } : null;
+  return data?.role === 'admin' ? { id: user.id, supabase } : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createAdminClient();
+    const supabase = caller.supabase;
 
     // Load task
     const { data: task, error: taskErr } = await supabase
