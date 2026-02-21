@@ -480,7 +480,7 @@ export async function callOllamaChat({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages,
         stream: false,
         temperature: 0.7,
       }),

@@ -11,7 +11,8 @@
     "worker": "tsx workers/job-worker.ts",
     "worker:prod": "node --loader ts-node/esm workers/job-worker.ts",
     "db:migrate": "npx supabase db push --db-url $DATABASE_URL",
-    "db:seed": "tsx scripts/seed-workflows.ts"
+    "db:seed": "tsx scripts/seed-workflows.ts",
+    "test:workflow": "tsx scripts/test-workflow.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.46",
@@ -25,6 +26,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "next": "14.2.35",
+    "next-intl": "^4.8.3",
     "react": "^18",
     "react-dom": "^18",
     "tailwind-merge": "^3.5.0",

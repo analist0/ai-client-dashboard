@@ -137,9 +137,13 @@ function DeliverableCard({ deliverable }: DeliverableCardProps) {
       </div>
 
       <div className="mt-4 flex gap-2">
-        <Button variant="primary" size="sm" className="flex-1">
+        <a
+          href={deliverable.file_url}
+          download
+          className="flex-1 inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 px-3 py-1.5 text-sm bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500"
+        >
           Download
-        </Button>
+        </a>
         <Button variant="outline" size="sm">
           Preview
         </Button>

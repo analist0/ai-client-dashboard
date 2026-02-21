@@ -10,15 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from '@/lib/supabase/client';
 
 type ApprovalStatus = 'approved' | 'rejected' | 'revision_requested';
 
@@ -40,7 +32,7 @@ export async function PATCH(
       );
     }
 
-    const supabase = adminClient();
+    const supabase = createAdminClient();
 
     // Load approval
     const { data: approval, error: approvalErr } = await supabase

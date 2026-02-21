@@ -135,7 +135,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle as="h2">Recent Tasks</CardTitle>
-              <Link href="/dashboard#tasks" className="text-sm text-blue-600 hover:underline">
+              <Link href="/tasks" className="text-sm text-blue-600 hover:underline">
                 View all
               </Link>
             </CardHeader>
