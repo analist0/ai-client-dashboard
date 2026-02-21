@@ -10,14 +10,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/client';
 
-function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+async function getAuthenticatedUser(
+  req: NextRequest
+): Promise<{ id: string; role: string } | null> {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return null;
+  const supabase = createAdminClient();
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  const { data } = await supabase.from('users').select('role').eq('id', user.id).single();
+  if (!data) return null;
+  return { id: user.id, role: data.role as string };
 }
 
 type ApprovalStatus = 'approved' | 'rejected' | 'revision_requested';
@@ -28,6 +33,11 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const caller = await getAuthenticatedUser(req);
+  if (!caller) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const approvalId = params.id;
     const body = await req.json();
@@ -40,7 +50,7 @@ export async function PATCH(
       );
     }
 
-    const supabase = adminClient();
+    const supabase = createAdminClient();
 
     // Load approval
     const { data: approval, error: approvalErr } = await supabase
@@ -51,6 +61,26 @@ export async function PATCH(
 
     if (approvalErr || !approval) {
       return NextResponse.json({ error: 'Approval not found' }, { status: 404 });
+    }
+
+    // Authorisation: admin can respond to any approval;
+    // a client can only respond to approvals for tasks they own.
+    if (caller.role !== 'admin') {
+      const taskId = approval.task_id as string;
+      const { data: task } = await supabase
+        .from('tasks')
+        .select('project_id')
+        .eq('id', taskId)
+        .single();
+      const { data: project } = task
+        ? await supabase.from('projects').select('client_id').eq('id', task.project_id as string).single()
+        : { data: null };
+      const { data: client } = project
+        ? await supabase.from('clients').select('user_id').eq('id', project.client_id as string).single()
+        : { data: null };
+      if (client?.user_id !== caller.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     if (approval.status !== 'pending') {
@@ -270,7 +300,7 @@ export async function PATCH(
 
       if (jobErr || !newJob) {
         return NextResponse.json(
-          { error: `Failed to queue next job: ${jobErr?.message}` },
+          { error: 'Failed to queue next job' },
           { status: 500 }
         );
       }
@@ -319,6 +349,7 @@ export async function PATCH(
 
     return NextResponse.json({ taskId, status: 'approved', message: 'Approved' });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error('[approvals] Unhandled error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -106,8 +106,7 @@ async function completeJob(
     .from('ai_jobs')
     .update({
       status: 'completed',
-      output: output,           // original column
-      output_data: output,      // new column
+      output_data: output,
       token_usage: tokenUsage ?? null,
       execution_time_ms: executionTimeMs ?? null,
       completed_at: new Date().toISOString(),
@@ -131,17 +130,16 @@ async function completeJob(
 
 async function failJob(jobId: string, errorMessage: string) {
   try {
-    // Use authoritative 'attempts' column (not retry_count) for retry gate
     const { data: job } = await supabase
       .from('ai_jobs')
-      .select('attempts, max_attempts, task_id')
+      .select('retry_count, max_retries, task_id')
       .eq('id', jobId)
       .single();
 
     if (!job) return;
 
-    const currentAttempts = (job.attempts as number) || 0;
-    const maxAttempts = (job.max_attempts as number) || 3;
+    const currentAttempts = (job.retry_count as number) || 0;
+    const maxAttempts = (job.max_retries as number) || 3;
 
     if (currentAttempts < maxAttempts) {
       // Exponential backoff: 2^attempts seconds + jitter, capped at 10 min

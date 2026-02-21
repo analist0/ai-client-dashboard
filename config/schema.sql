@@ -187,6 +187,10 @@ CREATE TABLE ai_jobs (
   logs JSONB DEFAULT '[]',
   retry_count INTEGER NOT NULL DEFAULT 0,
   max_retries INTEGER NOT NULL DEFAULT 3,
+  last_error TEXT,
+  locked_at TIMESTAMPTZ,
+  locked_by TEXT,
+  next_run_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
@@ -312,6 +316,10 @@ CREATE INDEX idx_tasks_assigned_to ON tasks(assigned_to);
 CREATE INDEX idx_ai_jobs_task_id ON ai_jobs(task_id);
 CREATE INDEX idx_ai_jobs_status ON ai_jobs(status);
 CREATE INDEX idx_ai_jobs_agent_name ON ai_jobs(agent_name);
+-- Composite indexes for worker polling efficiency
+CREATE INDEX idx_ai_jobs_status_created ON ai_jobs(status, created_at);
+CREATE INDEX idx_ai_jobs_queued_next_run ON ai_jobs(status, next_run_at) WHERE status = 'queued';
+CREATE INDEX idx_ai_jobs_running_locked ON ai_jobs(status, locked_at) WHERE status = 'running';
 CREATE INDEX idx_workflow_executions_task_id ON workflow_executions(task_id);
 CREATE INDEX idx_workflow_step_executions_execution_id ON workflow_step_executions(execution_id);
 CREATE INDEX idx_deliverables_task_id ON deliverables(task_id);
