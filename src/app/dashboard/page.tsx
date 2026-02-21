@@ -5,17 +5,32 @@
 'use client';
 
 import DashboardLayout from '@/components/dashboard-layout';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, ProgressBar } from '@/components/ui';
 import { useAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useTasks } from '@/hooks/use-tasks';
 import { formatDate, formatRelativeTime, getTaskTypeIcon, getAgentIcon } from '@/lib/utils/helpers';
+import type { Task } from '@/types';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const { projects, loading: projectsLoading } = useProjects({ limit: 5 });
   const { tasks, loading: tasksLoading } = useTasks({ limit: 10 });
+
+  // Group tasks by project for per-project progress calculation
+  const tasksByProject = tasks.reduce<Record<string, Task[]>>((acc, t) => {
+    if (!acc[t.project_id]) acc[t.project_id] = [];
+    acc[t.project_id].push(t);
+    return acc;
+  }, {});
+
+  const getProjectProgress = (projectId: string): number | null => {
+    const pts = tasksByProject[projectId];
+    if (!pts || pts.length === 0) return null;
+    return Math.round((pts.filter((t) => t.status === 'completed').length / pts.length) * 100);
+  };
 
   // Calculate stats
   const stats = {
@@ -51,6 +66,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
+        <ErrorBoundary>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Active Projects"
@@ -80,8 +96,10 @@ export default function DashboardPage() {
             color="green"
           />
         </div>
+        </ErrorBoundary>
 
         {/* Recent Projects & Tasks */}
+        <ErrorBoundary>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Recent Projects */}
           <Card>
@@ -115,15 +133,14 @@ export default function DashboardPage() {
                         </div>
                         <StatusBadge status={project.status} />
                       </div>
-                      {project.deadline && (
-                        <div className="mt-3">
-                          <ProgressBar
-                            value={60} // TODO: Calculate actual progress
-                            size="sm"
-                            showLabel
-                          />
-                        </div>
-                      )}
+                      {(() => {
+                        const progress = getProjectProgress(project.id);
+                        return progress !== null ? (
+                          <div className="mt-3">
+                            <ProgressBar value={progress} size="sm" showLabel />
+                          </div>
+                        ) : null;
+                      })()}
                     </Link>
                   ))}
                 </div>
@@ -181,8 +198,10 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+        </ErrorBoundary>
 
         {/* AI Activity */}
+        <ErrorBoundary>
         <Card>
           <CardHeader>
             <CardTitle as="h2">AI Agent Activity</CardTitle>
@@ -204,6 +223,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </ErrorBoundary>
       </div>
     </DashboardLayout>
   );

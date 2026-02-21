@@ -52,7 +52,9 @@ let isRunning = true;
 const activeJobs = new Map<string, { abortController: AbortController; startTime: number }>();
 let processedCount = 0;
 let failedCount = 0;
+let pollCount = 0;
 let lastSuccessfulPoll = Date.now();
+const workerStartTime = Date.now();
 
 // =====================================================
 // LOGGING
@@ -65,8 +67,26 @@ function log(
 ) {
   const ts = new Date().toISOString();
   const icon = { info: 'ℹ', warn: '⚠', error: '✗', debug: '·' }[level];
-  const extra = data ? ' ' + JSON.stringify(data) : '';
-  console.log(`[${ts}] ${icon} ${message}${extra}`);
+  const uptimeSec = Math.floor((Date.now() - workerStartTime) / 1000);
+  const base = { ts, uptime_sec: uptimeSec, ...(data || {}) };
+  console.log(`[${ts}] ${icon} ${message} ${JSON.stringify(base)}`);
+}
+
+/** Emit a periodic heartbeat — logged every HEARTBEAT_INTERVAL_MS. */
+const HEARTBEAT_INTERVAL_MS = 60_000;
+let lastHeartbeat = Date.now();
+
+function maybeHeartbeat() {
+  if (Date.now() - lastHeartbeat < HEARTBEAT_INTERVAL_MS) return;
+  lastHeartbeat = Date.now();
+  log('info', 'Worker heartbeat', {
+    activeJobs: activeJobs.size,
+    processedCount,
+    failedCount,
+    pollCount,
+    uptimeSec: Math.floor((Date.now() - workerStartTime) / 1000),
+    idleSinceSec: Math.floor((Date.now() - lastSuccessfulPoll) / 1000),
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -633,7 +653,9 @@ async function workerLoop() {
         );
       }
 
+      pollCount++;
       await checkTimedOutJobs();
+      maybeHeartbeat();
       await sleep(config.pollIntervalMs);
     } catch (err) {
       log('error', 'Worker loop error', { error: String(err) });
