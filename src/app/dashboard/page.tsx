@@ -4,6 +4,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/dashboard-layout';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, ProgressBar } from '@/components/ui';
@@ -11,13 +12,41 @@ import { useAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useTasks } from '@/hooks/use-tasks';
 import { cn, formatDate, formatRelativeTime, getTaskTypeIcon, getAgentIcon } from '@/lib/utils/helpers';
+import { createBrowserClient } from '@/lib/supabase/client';
 import type { Task } from '@/types';
 import Link from 'next/link';
+
+// Agent name → display label
+const AGENT_NAMES = ['ResearchAgent', 'WriterAgent', 'EditorAgent', 'SeoAgent', 'PlannerAgent'] as const;
+
+type AgentStat = { running: number; completedToday: number; failed: number };
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const { projects, loading: projectsLoading } = useProjects({ limit: 5 });
   const { tasks, loading: tasksLoading } = useTasks({ limit: 10 });
+  const [agentStats, setAgentStats] = useState<Record<string, AgentStat>>({});
+
+  // Fetch per-agent job counts (24 h window)
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    supabase
+      .from('ai_jobs')
+      .select('agent_name, status')
+      .gte('created_at', since)
+      .then(({ data }) => {
+        const stats: Record<string, AgentStat> = {};
+        for (const row of data || []) {
+          const key = row.agent_name as string;
+          if (!stats[key]) stats[key] = { running: 0, completedToday: 0, failed: 0 };
+          if (row.status === 'running') stats[key].running++;
+          else if (row.status === 'completed') stats[key].completedToday++;
+          else if (row.status === 'failed') stats[key].failed++;
+        }
+        setAgentStats(stats);
+      });
+  }, []);
 
   // Group tasks by project for per-project progress calculation
   const tasksByProject = tasks.reduce<Record<string, Task[]>>((acc, t) => {
@@ -208,18 +237,31 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {['ResearchAgent', 'WriterAgent', 'EditorAgent', 'SeoAgent', 'PlannerAgent'].map((agent) => (
-                <div
-                  key={agent}
-                  className="flex flex-col items-center p-4 rounded-lg bg-gray-50"
-                >
-                  <span className="text-3xl mb-2">{getAgentIcon(agent)}</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {agent.replace('Agent', '')}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">Ready</span>
-                </div>
-              ))}
+              {AGENT_NAMES.map((agent) => {
+                const s = agentStats[agent];
+                const statusLabel = s?.running
+                  ? `${s.running} running`
+                  : s?.completedToday
+                  ? `${s.completedToday} today`
+                  : 'Idle';
+                const statusColor = s?.running
+                  ? 'text-blue-600'
+                  : s?.failed
+                  ? 'text-red-500'
+                  : 'text-gray-400';
+                return (
+                  <div
+                    key={agent}
+                    className="flex flex-col items-center p-4 rounded-lg bg-gray-50"
+                  >
+                    <span className="text-3xl mb-2">{getAgentIcon(agent)}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {agent.replace('Agent', '')}
+                    </span>
+                    <span className={cn('text-xs mt-1', statusColor)}>{statusLabel}</span>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

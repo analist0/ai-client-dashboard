@@ -50,6 +50,15 @@ export async function PATCH(
       );
     }
 
+    if (notes !== undefined && notes !== null) {
+      if (typeof notes !== 'string') {
+        return NextResponse.json({ error: 'notes must be a string' }, { status: 400 });
+      }
+      if (notes.length > 2000) {
+        return NextResponse.json({ error: 'notes must be 2000 characters or fewer' }, { status: 400 });
+      }
+    }
+
     const supabase = createAdminClient();
 
     // Load approval
