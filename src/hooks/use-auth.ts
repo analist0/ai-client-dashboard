@@ -134,7 +134,8 @@ export function useAuth() {
     if (!user) return { success: false, error: 'Not authenticated' };
 
     try {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from('users')
         .update(updates)
         .eq('id', user.id);

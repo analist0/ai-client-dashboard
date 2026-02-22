@@ -4,7 +4,7 @@
  */
 
 import { BaseAgent, registerAgent } from './base-agent';
-import type { AgentInput, TaskType } from '@/types';
+import type { AgentInput } from '@/types';
 
 const PLANNER_SYSTEM_PROMPT = `You are a Planner Agent specialized in creating project plans and task breakdowns.
 
@@ -70,7 +70,7 @@ export class PlannerAgent extends BaseAgent {
       deadline,
       budget,
       preferences,
-    } = input.inputData;
+    } = input.inputData as { projectName?: string; projectDescription?: string; objectives?: string[]; taskType?: string; complexity?: string; deadline?: string; budget?: unknown; preferences?: unknown };
 
     let prompt = `Create a project plan with the following specifications:\n\n`;
     prompt += `Project Name: ${projectName}\n`;

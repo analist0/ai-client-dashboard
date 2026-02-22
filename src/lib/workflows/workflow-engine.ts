@@ -9,10 +9,8 @@ import type {
   WorkflowStepDefinition,
   WorkflowExecution,
   WorkflowStepExecution,
-  Task,
   AgentInput,
   AgentOutput,
-  JobStatus,
   TaskStatus,
 } from '@/types';
 import { getAgent } from '@/lib/agents';
@@ -53,7 +51,8 @@ export class WorkflowExecutor {
    * Start workflow execution
    */
   async execute(): Promise<WorkflowExecution> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     try {
       // Create workflow execution record
@@ -146,7 +145,8 @@ export class WorkflowExecutor {
     stepIndex: number,
     step: WorkflowStepDefinition
   ): Promise<StepExecutionResult> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     // Create step execution record
     const { data: stepExecution, error: insertError } = await supabase
@@ -208,7 +208,8 @@ export class WorkflowExecutor {
     step: WorkflowStepDefinition,
     stepExecutionId: string
   ): Promise<StepExecutionResult> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     if (!step.agent) {
       return { success: false, error: 'No agent specified for step' };
@@ -216,6 +217,7 @@ export class WorkflowExecutor {
 
     // Get the agent
     const agent = getAgent(step.agent, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       provider: (step.config?.provider as any) || 'openai',
       model: (step.config?.model as string) || 'gpt-4o',
     });
@@ -237,11 +239,14 @@ export class WorkflowExecutor {
       .insert({
         task_id: this.options.taskId,
         agent_name: step.agent,
-        model: agent.config.model,
-        provider: agent.config.provider,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: (agent as any).config.model,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        provider: (agent as any).config.provider,
         status: agentOutput.success ? 'completed' : 'failed',
         prompt: JSON.stringify(agentInput),
-        system_prompt: agent.config.systemPrompt,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        system_prompt: (agent as any).config.systemPrompt,
         input_data: agentInput.inputData,
         output_data: agentOutput.data,
         token_usage: agentOutput.metadata?.tokenUsage || null,
@@ -277,7 +282,8 @@ export class WorkflowExecutor {
     step: WorkflowStepDefinition,
     stepExecutionId: string
   ): Promise<StepExecutionResult> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     // Update task status to waiting_approval
     await this.updateTaskStatus('waiting_approval');
@@ -329,7 +335,8 @@ export class WorkflowExecutor {
     step: WorkflowStepDefinition,
     stepExecutionId: string
   ): Promise<StepExecutionResult> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     // Custom step logic can be extended here
     // For now, just mark as completed
@@ -367,7 +374,8 @@ export class WorkflowExecutor {
    * Get outputs from previous steps
    */
   private async getPreviousOutputs(): Promise<AgentOutput[]> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     const { data: steps } = await supabase
       .from('workflow_step_executions')
@@ -381,8 +389,10 @@ export class WorkflowExecutor {
     }
 
     return steps
-      .filter((s) => s.output_data)
-      .map((s) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((s: any) => s.output_data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((s: any) => ({
         success: true,
         data: s.output_data as Record<string, unknown>,
         summary: JSON.stringify(s.output_data).substring(0, 500),
@@ -420,7 +430,8 @@ export class WorkflowExecutor {
     error: string
   ): Promise<boolean> {
     const maxRetries = step.retry_count || 3;
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     // Get current retry count
     const { data: stepExecution } = await supabase
@@ -430,6 +441,7 @@ export class WorkflowExecutor {
       .eq('step_index', stepIndex)
       .single();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const retryCount = ((stepExecution?.output_data as any)?.retryCount || 0) + 1;
 
     if (retryCount <= maxRetries) {
@@ -457,7 +469,8 @@ export class WorkflowExecutor {
     step: WorkflowStepDefinition,
     output?: Record<string, unknown>
   ): Promise<void> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     await supabase
       .from('workflow_step_executions')
@@ -483,7 +496,8 @@ export class WorkflowExecutor {
    * Mark step as skipped
    */
   private async markStepSkipped(stepIndex: number, step: WorkflowStepDefinition): Promise<void> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     await supabase
       .from('workflow_step_executions')
@@ -506,7 +520,8 @@ export class WorkflowExecutor {
    * Complete the workflow
    */
   private async completeWorkflow(): Promise<void> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     await supabase
       .from('workflow_executions')
@@ -528,7 +543,8 @@ export class WorkflowExecutor {
    * Fail the workflow
    */
   private async failWorkflow(error: string): Promise<void> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     await supabase
       .from('workflow_executions')
@@ -550,7 +566,8 @@ export class WorkflowExecutor {
    * Update task status
    */
   private async updateTaskStatus(status: TaskStatus): Promise<void> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     await supabase
       .from('tasks')
@@ -565,7 +582,8 @@ export class WorkflowExecutor {
    * Get step execution by index
    */
   private async getStepExecution(stepIndex: number): Promise<WorkflowStepExecution | null> {
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     const { data } = await supabase
       .from('workflow_step_executions')
@@ -586,7 +604,8 @@ export class WorkflowExecutor {
       throw new Error('No active execution to resume');
     }
 
-    const supabase = createServerClient(undefined, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createServerClient(undefined, true) as any;
 
     // Reload execution state from DB to get latest current_step
     const { data: freshExecution } = await supabase
@@ -672,7 +691,8 @@ export class WorkflowExecutor {
 // =====================================================
 
 export class WorkflowManager {
-  private supabase;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private supabase: any;
 
   constructor() {
     this.supabase = createServerClient(undefined, true);

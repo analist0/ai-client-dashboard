@@ -32,18 +32,26 @@ export async function PATCH(
       );
     }
 
-    const supabase = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any;
 
     // Load approval
-    const { data: approval, error: approvalErr } = await supabase
+    const { data: approvalRaw, error: approvalErr } = await supabase
       .from('approvals')
       .select('id, task_id, status, metadata')
       .eq('id', approvalId)
       .single();
 
-    if (approvalErr || !approval) {
+    if (approvalErr || !approvalRaw) {
       return NextResponse.json({ error: 'Approval not found' }, { status: 404 });
     }
+
+    const approval = approvalRaw as {
+      id: string;
+      task_id: string;
+      status: string;
+      metadata: Record<string, unknown> | null;
+    };
 
     if (approval.status !== 'pending') {
       return NextResponse.json(
@@ -62,11 +70,8 @@ export async function PATCH(
       })
       .eq('id', approvalId);
 
-    const taskId = approval.task_id as string;
-    const meta = approval.metadata as {
-      step_index?: number;
-      execution_id?: string;
-    } | null;
+    const taskId = approval.task_id;
+    const meta = approval.metadata as { step_index?: number; execution_id?: string } | null;
 
     // ── Rejected: fail the workflow ────────────────────────────
     if (status === 'rejected') {
@@ -218,8 +223,8 @@ export async function PATCH(
         .order('step_index', { ascending: true });
 
       const prevOutputs = (doneSteps || []).reduce(
-        (acc, s) => {
-          if (s.output_data) acc[s.step_name as string] = s.output_data;
+        (acc: Record<string, unknown>, s: { step_name: string; output_data: unknown }) => {
+          if (s.output_data) acc[s.step_name] = s.output_data;
           return acc;
         },
         {} as Record<string, unknown>

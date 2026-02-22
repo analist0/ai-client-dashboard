@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = createAdminClient() as any;
 
     // Load task
     const { data: task, error: taskErr } = await supabase

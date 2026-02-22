@@ -38,7 +38,8 @@ export class ResearchAgent extends BaseAgent {
   }
 
   protected async buildUserPrompt(input: AgentInput): Promise<string> {
-    const { topic, keywords, depth = 'comprehensive', excludeSources = [] } = input.inputData;
+    const inputData = input.inputData as { topic?: unknown; keywords?: unknown; depth?: unknown; excludeSources?: string[] };
+    const { topic, keywords, depth = 'comprehensive', excludeSources = [] } = inputData;
 
     let prompt = `Research Topic: ${topic}\n\n`;
 

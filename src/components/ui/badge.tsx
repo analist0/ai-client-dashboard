@@ -74,6 +74,7 @@ export function StatusBadge({
   status,
   label,
   showDot = true,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   size = 'sm',
   className,
 }: StatusBadgeProps) {

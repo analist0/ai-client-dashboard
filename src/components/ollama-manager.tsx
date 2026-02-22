@@ -328,7 +328,7 @@ function PullPanel({ onPulled }: { onPulled: () => void }) {
 export function OllamaManager() {
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [, setDeleting] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);

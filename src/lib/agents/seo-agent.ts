@@ -71,7 +71,7 @@ export class SeoAgent extends BaseAgent {
       targetAudience,
       competitors,
       analysisType = 'full',
-    } = input.inputData;
+    } = input.inputData as { content?: string; title?: string; targetKeywords?: string[]; targetAudience?: string; competitors?: string[]; analysisType?: string };
 
     let prompt = `Perform SEO analysis with the following parameters:\n\n`;
     prompt += `Analysis Type: ${analysisType}\n`;

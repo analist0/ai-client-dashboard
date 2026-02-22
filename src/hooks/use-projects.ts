@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
-import type { Project, ProjectStatus, PaginatedResponse } from '@/types';
+import type { Project, ProjectStatus } from '@/types';
 
 interface UseProjectsOptions {
   clientId?: string;
@@ -20,7 +20,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
+  const [total] = useState(0);
 
   const {
     clientId,
@@ -82,7 +82,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
 
       if (error) throw error;
       return data as unknown as Project;
-    } catch (err) {
+    } catch {
       return null;
     }
   }, [supabase]);
@@ -92,7 +92,8 @@ export function useProjects(options: UseProjectsOptions = {}) {
     try {
       const { data, error } = await supabase
         .from('projects')
-        .insert(project)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(project as any)
         .select()
         .single();
 
@@ -114,7 +115,8 @@ export function useProjects(options: UseProjectsOptions = {}) {
     try {
       const { error } = await supabase
         .from('projects')
-        .update(updates)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update(updates as any)
         .eq('id', projectId);
 
       if (error) throw error;

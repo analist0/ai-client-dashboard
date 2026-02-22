@@ -9,8 +9,8 @@ import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button, Timeline } from '@/components/ui';
 import { useTasks } from '@/hooks/use-tasks';
-import { formatDate, formatRelativeTime, getTaskTypeIcon } from '@/lib/utils/helpers';
-import type { Project, Task } from '@/types';
+import { formatDate, formatRelativeTime } from '@/lib/utils/helpers';
+import type { Project } from '@/types';
 import Link from 'next/link';
 
 export default function ProjectDetailPage() {
@@ -58,8 +58,8 @@ export default function ProjectDetailPage() {
     .map((task) => ({
       date: formatDate(task.deadline!),
       title: task.name,
-      status: task.status === 'completed' ? 'completed' : 
-              task.status === 'running' ? 'current' : 'upcoming' as const,
+      status: (task.status === 'completed' ? 'completed' :
+               task.status === 'running' ? 'current' : 'upcoming') as 'completed' | 'current' | 'upcoming',
       description: `${task.type} task`,
     }));
 

@@ -51,6 +51,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       clients: {
         Row: {
@@ -86,6 +87,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       projects: {
         Row: {
@@ -136,6 +138,7 @@ export interface Database {
           updated_at?: string;
           created_by?: string | null;
         };
+        Relationships: [];
       };
       workflows: {
         Row: {
@@ -171,6 +174,7 @@ export interface Database {
           updated_at?: string;
           created_by?: string | null;
         };
+        Relationships: [];
       };
       tasks: {
         Row: {
@@ -245,6 +249,7 @@ export interface Database {
           updated_at?: string;
           completed_at?: string | null;
         };
+        Relationships: [];
       };
       ai_jobs: {
         Row: {
@@ -319,6 +324,7 @@ export interface Database {
           completed_at?: string | null;
           created_by?: string | null;
         };
+        Relationships: [];
       };
       workflow_executions: {
         Row: {
@@ -357,6 +363,7 @@ export interface Database {
           updated_at?: string;
           completed_at?: string | null;
         };
+        Relationships: [];
       };
       workflow_step_executions: {
         Row: {
@@ -401,6 +408,7 @@ export interface Database {
           started_at?: string | null;
           completed_at?: string | null;
         };
+        Relationships: [];
       };
       deliverables: {
         Row: {
@@ -448,6 +456,7 @@ export interface Database {
           created_at?: string;
           created_by?: string | null;
         };
+        Relationships: [];
       };
       approvals: {
         Row: {
@@ -489,6 +498,7 @@ export interface Database {
           revision_requests?: number;
           metadata?: Json;
         };
+        Relationships: [];
       };
       notifications: {
         Row: {
@@ -524,6 +534,7 @@ export interface Database {
           read_at?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       activity_logs: {
         Row: {
@@ -559,6 +570,7 @@ export interface Database {
           user_agent?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       api_keys: {
         Row: {
@@ -597,6 +609,7 @@ export interface Database {
           is_active?: boolean;
           created_at?: string;
         };
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

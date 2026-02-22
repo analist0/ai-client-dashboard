@@ -113,8 +113,10 @@ export function createAdminClient(): DBClient {
  * Minimal configuration for auth cookie handling
  */
 export function createMiddlewareClient(
-  req: Request,
-  res: Response
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _req: Request,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _res: Response
 ): DBClient {
   const { supabaseUrl, supabaseAnonKey } = getEnvVars();
   // Note: For full middleware support, use @supabase/ssr

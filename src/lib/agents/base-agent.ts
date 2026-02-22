@@ -10,12 +10,11 @@
  * - Token usage tracking
  */
 
-import { generateText, type Message } from 'ai';
+import { generateText, type ModelMessage as CoreMessage } from 'ai';
 import { createOpenAI, type OpenAIProviderSettings } from '@ai-sdk/openai';
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProviderSettings } from '@ai-sdk/google';
 import { createXai, type XaiProviderSettings } from '@ai-sdk/xai';
-import { z } from 'zod';
 import type {
   AgentConfig,
   AgentInput,
@@ -33,8 +32,6 @@ import {
   validateAgentOutput,
   getValidationSummary,
   classifyError,
-  type FailureStage,
-  type FailureType,
 } from '@/lib/llm';
 
 // =====================================================
@@ -220,7 +217,8 @@ export abstract class BaseAgent {
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
-      const { failure_stage, failure_type, error_message } = classifyError(error);
+      const { stage: failure_stage, type: failure_type } = classifyError(error);
+      const error_message = error instanceof Error ? error.message : String(error);
 
       this.log('error', `Agent execution failed`, {
         error: error_message,
@@ -328,16 +326,16 @@ Always respond with valid JSON when structured output is expected.`;
         model,
         messages,
         temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
+        maxOutputTokens: this.config.maxTokens,
       });
 
       return {
         output: result.text,
         summary: result.text.substring(0, 500), // First 500 chars as summary
         tokenUsage: {
-          prompt_tokens: result.usage?.promptTokens || 0,
-          completion_tokens: result.usage?.completionTokens || 0,
-          total_tokens: result.usage?.totalTokens || 0,
+          prompt_tokens: result.usage?.inputTokens || 0,
+          completion_tokens: result.usage?.outputTokens || 0,
+          total_tokens: (result.usage?.inputTokens || 0) + (result.usage?.outputTokens || 0),
         },
       };
     } catch (error) {
@@ -364,7 +362,8 @@ Always respond with valid JSON when structured output is expected.`;
       const result = await callOllamaChat({
         baseURL,
         model: this.config.model,
-        messages,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        messages: messages as any,
         timeout: this.config.timeoutMs,
       });
 
@@ -389,7 +388,8 @@ Always respond with valid JSON when structured output is expected.`;
    */
   protected async parseOutput(
     output: string,
-    input: AgentInput
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _input: AgentInput
   ): Promise<Record<string, unknown>> {
     const agentSchema = getSchemaForAgent(this.config.name);
     
@@ -426,13 +426,13 @@ Always respond with valid JSON when structured output is expected.`;
         });
 
         return {
-          ...validation.data,
+          ...(validation.data as Record<string, unknown>),
           schema_valid: false,
           schema_errors: getValidationSummary(validation.errors),
         };
       }
 
-      return validation.data;
+      return validation.data as Record<string, unknown>;
     }
 
     return sanitized;

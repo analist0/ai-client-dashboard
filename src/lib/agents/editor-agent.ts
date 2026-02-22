@@ -56,7 +56,7 @@ export class EditorAgent extends BaseAgent {
       targetAudience,
       focusAreas,
       preserveVoice = true,
-    } = input.inputData;
+    } = input.inputData as { content?: string; title?: string; editType?: string; styleGuide?: unknown; targetAudience?: string; focusAreas?: string[]; preserveVoice?: boolean };
 
     let prompt = `Edit the following content:\n\n`;
     prompt += `Edit Type: ${editType}\n`;

@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import DashboardLayout from '@/components/dashboard-layout';
-import { Card, CardHeader, CardTitle, CardContent, StatusBadge, Button } from '@/components/ui';
+import { Card, CardContent, StatusBadge, Button } from '@/components/ui';
 import { useProjects } from '@/hooks/use-projects';
 import { formatDate } from '@/lib/utils/helpers';
 import Link from 'next/link';

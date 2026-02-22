@@ -6,13 +6,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createBrowserClient, type TypedSupabaseClient } from '@/lib/supabase/client';
-
-type RealtimeEvent<T> = {
-  type: 'INSERT' | 'UPDATE' | 'DELETE';
-  table: string;
-  data: T;
-};
+import { createBrowserClient } from '@/lib/supabase/client';
 
 interface UseRealtimeOptions<T> {
   table: string;
@@ -43,7 +37,7 @@ export function useRealtime<T>({
       let query = supabase.from(table).select('*');
 
       if (filter) {
-        const [column, op, value] = filter.split(/[.=]/);
+        const [column, , value] = filter.split(/[.=]/);
         query = query.eq(column, value);
       }
 
@@ -92,6 +86,7 @@ export function useRealtime<T>({
         } else if (payload.eventType === 'UPDATE') {
           setData((prev) => {
             const newData = prev.map((item) =>
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (item as any).id === (payload.new as any).id
                 ? { ...item, ...payload.new }
                 : item
@@ -102,6 +97,7 @@ export function useRealtime<T>({
         } else if (payload.eventType === 'DELETE') {
           setData((prev) => {
             const newData = prev.filter(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (item) => (item as any).id !== (payload.old as any).id
             );
             if (onChange) onChange(newData);

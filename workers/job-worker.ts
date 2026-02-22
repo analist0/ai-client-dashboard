@@ -509,7 +509,7 @@ async function executeJob(job: Record<string, unknown>) {
     }
 
     const agent = getAgent(job.agent_name as string, {
-      provider: job.provider as string,
+      provider: job.provider as import('@/types').LLMProvider,
       model: job.model as string,
       timeoutMs: config.jobTimeoutMs,
     });
@@ -575,7 +575,7 @@ async function executeJob(job: Record<string, unknown>) {
 
 async function checkTimedOutJobs() {
   const now = Date.now();
-  for (const [jobId, info] of activeJobs.entries()) {
+  for (const [jobId, info] of Array.from(activeJobs.entries())) {
     if (now - info.startTime > config.jobTimeoutMs) {
       log('warn', 'Job timed out locally', { jobId });
       info.abortController.abort();

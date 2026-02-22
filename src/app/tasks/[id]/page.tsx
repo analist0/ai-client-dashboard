@@ -21,7 +21,6 @@ import {
 import { useTasks } from '@/hooks/use-tasks';
 import { useTaskRealtime } from '@/hooks/use-task-realtime';
 import {
-  formatDate,
   formatDuration,
   formatRelativeTime,
   getTaskTypeIcon,

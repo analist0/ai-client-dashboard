@@ -19,6 +19,7 @@ export function useNotifications(userId?: string) {
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     setError(null);
 
@@ -116,6 +117,7 @@ export function useNotifications(userId?: string) {
 
   // Mark all notifications as read
   const markAllAsRead = useCallback(async (): Promise<boolean> => {
+    if (!userId) return false;
     try {
       const { error } = await supabase
         .from('notifications')
@@ -157,6 +159,7 @@ export function useNotifications(userId?: string) {
 
   // Clear all notifications
   const clearAll = useCallback(async (): Promise<boolean> => {
+    if (!userId) return false;
     try {
       const { error } = await supabase
         .from('notifications')

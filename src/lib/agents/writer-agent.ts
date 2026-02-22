@@ -69,7 +69,7 @@ export class WriterAgent extends BaseAgent {
       research,
       wordCount,
       includeCTA = true,
-    } = input.inputData;
+    } = input.inputData as { topic?: string; contentType?: string; style?: string; targetAudience?: string; keywords?: string[]; outline?: unknown; research?: unknown; wordCount?: number; includeCTA?: boolean };
 
     let prompt = `Write a ${contentType} with the following specifications:\n\n`;
     prompt += `Topic: ${topic}\n`;

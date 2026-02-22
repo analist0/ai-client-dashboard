@@ -177,10 +177,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           'fixed inset-y-0 start-0 z-50 flex flex-col w-64',
           'bg-white border-e border-gray-200/80 shadow-sm',
           'transition-transform duration-300 ease-in-out',
+          // Desktop: always visible. max-lg variants are mutually exclusive
+          // with lg:translate-x-0, so there is no CSS cascade conflict.
           'lg:translate-x-0',
           sidebarOpen
             ? 'translate-x-0'
-            : 'ltr:-translate-x-full rtl:translate-x-full'
+            : 'max-lg:ltr:-translate-x-full max-lg:rtl:translate-x-full'
         )}
       >
         {/* Logo */}
