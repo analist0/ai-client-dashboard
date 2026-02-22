@@ -13,11 +13,12 @@ import { formatDate, formatDuration, getAgentIcon } from '@/lib/utils/helpers';
 import type { AIJob } from '@/types';
 
 export default function AILogsPage() {
-  const { data: aiJobs, loading, refresh } = useRealtimeAiJobs();
+  const { data: rawJobs, loading, refresh } = useRealtimeAiJobs();
+  const aiJobs = rawJobs as AIJob[];
   const [selectedJob, setSelectedJob] = useState<AIJob | null>(null);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'running'>('all');
 
-  const filteredJobs = aiJobs.filter((job: AIJob) => {
+  const filteredJobs = aiJobs.filter((job) => {
     if (filter === 'all') return true;
     return job.status === filter;
   });
