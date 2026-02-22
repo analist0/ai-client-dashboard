@@ -25,7 +25,7 @@ export default function ProjectsPage() {
   const [filterStatus, setFilterStatus] = useState<ProjectStatus | ''>('');
   const [showModal, setShowModal] = useState(false);
 
-  const { projects, loading, error, createProject } = useProjects({
+  const { projects, loading, error, createProject, fetchProjects } = useProjects({
     status: filterStatus || undefined,
   });
 
@@ -118,8 +118,12 @@ export default function ProjectsPage() {
         <NewProjectModal
           onClose={() => setShowModal(false)}
           onCreate={async (data) => {
-            await createProject(data);
-            setShowModal(false);
+            const result = await createProject(data);
+            if (result) {
+              setShowModal(false);
+              fetchProjects();
+            }
+            return result;
           }}
         />
       )}
@@ -131,7 +135,8 @@ export default function ProjectsPage() {
 
 interface NewProjectModalProps {
   onClose: () => void;
-  onCreate: (data: Record<string, unknown>) => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onCreate: (data: Record<string, unknown>) => Promise<any>;
 }
 
 function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {

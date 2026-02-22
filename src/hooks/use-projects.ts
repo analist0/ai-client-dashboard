@@ -87,13 +87,43 @@ export function useProjects(options: UseProjectsOptions = {}) {
     }
   }, [supabase]);
 
+  // Resolve client_id for the current user (create client record if needed)
+  const resolveClientId = useCallback(async (): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // Look up existing client record
+    const { data: existing } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (existing) return existing.id;
+
+    // Create a default client record for this user
+    const { data: created, error } = await supabase
+      .from('clients')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert({ user_id: user.id } as any)
+      .select('id')
+      .single();
+
+    if (error || !created) return null;
+    return created.id;
+  }, [supabase]);
+
   // Create project
   const createProject = useCallback(async (project: Partial<Project>): Promise<Project | null> => {
     try {
+      // Resolve client_id if not provided
+      const client_id = project.client_id || (await resolveClientId());
+      if (!client_id) throw new Error('Could not resolve client. Are you logged in?');
+
       const { data, error } = await supabase
         .from('projects')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .insert(project as any)
+        .insert({ ...project, client_id } as any)
         .select()
         .single();
 
@@ -102,10 +132,11 @@ export function useProjects(options: UseProjectsOptions = {}) {
       setProjects((prev) => [data as unknown as Project, ...prev]);
       return data as unknown as Project;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create project');
-      return null;
+      const msg = err instanceof Error ? err.message : 'Failed to create project';
+      setError(msg);
+      throw new Error(msg);
     }
-  }, [supabase]);
+  }, [supabase, resolveClientId]);
 
   // Update project
   const updateProject = useCallback(async (
