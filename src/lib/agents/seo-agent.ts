@@ -88,7 +88,7 @@ export class SeoAgent extends BaseAgent {
       prompt += `Target Audience: ${targetAudience}\n`;
     }
 
-    if (content) {
+    if (content && typeof content === 'string') {
       prompt += `\n--- CONTENT TO ANALYZE ---\n${content.substring(0, 10000)}${content.length > 10000 ? '...' : ''}\n--- CONTENT END ---\n`;
     }
 

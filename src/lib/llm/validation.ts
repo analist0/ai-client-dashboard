@@ -23,7 +23,7 @@ export const tokenUsageSchema = z.object({
  */
 export const agentOutputSchema = z.object({
   success: z.boolean(),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
   summary: z.string().optional(),
   error: z.string().optional(),
   metadata: z.object({
@@ -126,7 +126,7 @@ export const seoOutputSchema = z.object({
   technicalSeo: z.object({
     urlSlug: z.string(),
     canonicalUrl: z.string().url().optional(),
-    schemaMarkup: z.record(z.unknown()).optional(),
+    schemaMarkup: z.record(z.string(), z.unknown()).optional(),
     checklist: z.array(z.object({
       item: z.string(),
       status: z.enum(['pass', 'fail', 'warning']),
@@ -169,7 +169,7 @@ export const plannerOutputSchema = z.object({
     priority: z.number().min(1).max(10),
     dependencies: z.array(z.string()).optional(),
     assignedAgent: z.string().optional(),
-    inputRequirements: z.record(z.unknown()).optional(),
+    inputRequirements: z.record(z.string(), z.unknown()).optional(),
     expectedOutput: z.string(),
   })),
   timeline: z.object({

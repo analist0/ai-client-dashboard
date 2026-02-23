@@ -10,7 +10,7 @@
  * - Token usage tracking
  */
 
-import { generateText, type Message } from 'ai';
+import { generateText, type CoreMessage } from 'ai';
 import { createOpenAI, type OpenAIProviderSettings } from '@ai-sdk/openai';
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProviderSettings } from '@ai-sdk/google';
@@ -32,7 +32,7 @@ import {
   getSchemaForAgent,
   validateAgentOutput,
   getValidationSummary,
-  classifyError,
+  createFailureMetadata,
   type FailureStage,
   type FailureType,
 } from '@/lib/llm';
@@ -220,7 +220,7 @@ export abstract class BaseAgent {
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
-      const { failure_stage, failure_type, error_message } = classifyError(error);
+      const { failure_stage, failure_type, error_message } = createFailureMetadata(error);
 
       this.log('error', `Agent execution failed`, {
         error: error_message,
@@ -261,12 +261,12 @@ export abstract class BaseAgent {
    * Build messages for the LLM
    * Override in subclasses for custom message structure
    */
-  protected async buildMessages(input: AgentInput): Promise<Message[]> {
+  protected async buildMessages(input: AgentInput): Promise<CoreMessage[]> {
     const systemPrompt = this.config.systemPrompt || this.getDefaultSystemPrompt();
 
     const userPrompt = await this.buildUserPrompt(input);
 
-    const messages: Message[] = [
+    const messages: CoreMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
@@ -276,7 +276,7 @@ export abstract class BaseAgent {
       for (const prevOutput of input.previousOutputs) {
         messages.push({
           role: 'assistant',
-          content: prevOutput.summary || JSON.stringify(prevOutput.data),
+          content: [{ type: 'text', text: prevOutput.summary || JSON.stringify(prevOutput.data) }],
         });
       }
     }
@@ -306,7 +306,7 @@ Always respond with valid JSON when structured output is expected.`;
   /**
    * Call the LLM with the given messages
    */
-  protected async callLLM(messages: Message[]): Promise<{
+  protected async callLLM(messages: CoreMessage[]): Promise<{
     output: string;
     summary?: string;
     tokenUsage?: TokenUsage;
@@ -328,16 +328,16 @@ Always respond with valid JSON when structured output is expected.`;
         model,
         messages,
         temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
+        maxOutputTokens: this.config.maxTokens,
       });
 
       return {
         output: result.text,
         summary: result.text.substring(0, 500), // First 500 chars as summary
         tokenUsage: {
-          prompt_tokens: result.usage?.promptTokens || 0,
-          completion_tokens: result.usage?.completionTokens || 0,
-          total_tokens: result.usage?.totalTokens || 0,
+          prompt_tokens: result.usage?.inputTokens || 0,
+          completion_tokens: result.usage?.outputTokens || 0,
+          total_tokens: (result.usage?.inputTokens || 0) + (result.usage?.outputTokens || 0),
         },
       };
     } catch (error) {
@@ -353,7 +353,7 @@ Always respond with valid JSON when structured output is expected.`;
   /**
    * Call Ollama directly via HTTP
    */
-  private async callOllama(messages: Message[]): Promise<{
+  private async callOllama(messages: CoreMessage[]): Promise<{
     output: string;
     summary?: string;
     tokenUsage?: TokenUsage;
@@ -362,10 +362,14 @@ Always respond with valid JSON when structured output is expected.`;
 
     try {
       // Map to plain {role, content} objects — Ollama only accepts string content
-      const ollamaMessages = messages.map((m) => ({
-        role: m.role as string,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      }));
+      const ollamaMessages = messages.map((m) => {
+        const content = typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content.map((p) => (typeof p === 'object' && 'text' in p ? (p as { text: string }).text : '')).join('')
+            : JSON.stringify(m.content);
+        return { role: m.role as string, content };
+      });
 
       const result = await callOllamaChat({
         baseURL,
@@ -432,13 +436,13 @@ Always respond with valid JSON when structured output is expected.`;
         });
 
         return {
-          ...validation.data,
+          ...(validation.data as Record<string, unknown>),
           schema_valid: false,
           schema_errors: getValidationSummary(validation.errors),
         };
       }
 
-      return validation.data;
+      return validation.data as Record<string, unknown>;
     }
 
     return sanitized;

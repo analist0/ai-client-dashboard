@@ -13,7 +13,8 @@ import { formatDate, formatDuration, getAgentIcon } from '@/lib/utils/helpers';
 import type { AIJob } from '@/types';
 
 export default function AILogsPage() {
-  const { data: aiJobs, loading, refresh } = useRealtimeAiJobs();
+  const { data: rawAiJobs, loading, refresh } = useRealtimeAiJobs();
+  const aiJobs = rawAiJobs as AIJob[];
   const [selectedJob, setSelectedJob] = useState<AIJob | null>(null);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'running'>('all');
 
